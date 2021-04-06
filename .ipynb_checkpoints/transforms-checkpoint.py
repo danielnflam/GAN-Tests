@@ -20,52 +20,114 @@ class ToTensor(object):
     
     No init -- this is a standard function.
     """
-    def __init__(self):
-        self.desc = "Numpy ndarray to Torch Tensor"
-    def __call__(self, image):
-        image = image[np.newaxis, np.newaxis,:]
-        return torch.from_numpy(image)
+    def __init__(self, sample_keys):
+        self.sample_keys_images = sample_keys
+    def __call__(self, sample):
+        """
+        Input:
+            sample (dict): the dictionary containing the images to be transformed
+        """
+        for key_idx in self.sample_keys_images:
+            image = sample[key_idx]
+            image = image.astype(np.float64)
+            sample[key_idx] = torch.from_numpy(image[np.newaxis, np.newaxis,:])
+            
+        return sample
 
-class StandardiseSize(object):
+class Rescale(object):
     """
     Rescale the image in a sample to a given size.
+    This effectively resamples the image to fit that given output size.
+    
+    Input integer decides the number of column pixels.
+    
+    To keep the aspect ratio the same, use an integer as the input when initialising this object.
     """
-    def __init__(self, output_size):
+    def __init__(self, output_size, sample_keys_images, sample_key_PixelSize):
         """
         Inputs:
             output_size (tuple or int): Desired output size. If tuple, output is
-            matched to output_size. If int, smaller of image edges is matched
-            to output_size keeping aspect ratio the same.
+            matched to output_size. If int, that will be the number of column pixels, 
+            and the number of row pixels is determined from the aspect ratio
+            sample_keys_images (list or tuple): list of strings representing the keys to images in the sample_dictionary
+            sample_key_PixelSize (string): string for the key holding the PixelSize values in the sample dict.
         """
         assert isinstance(output_size, (int, tuple))
         self.output_size = output_size
-    def __call__(self, input_image):
+        self.sample_keys_images = sample_keys_images
+        self.sample_key_PixelSize = sample_key_PixelSize
+        
+    def __call__(self, sample):
         """
         Inputs:
-            input_image (Torch Tensor): a 4D input image [B x C x H x W]
-                                        B is batch number, C is channels, H is number of rows, W is number of columns
+            sample (dict): the dictionary containing the images to be transformed
+                            Images should be Torch Tensors in the format: [B x C x H x W]
+                            B is batch number, C is channels, H is number of rows, W is number of columns
+                            The "ToTensor" function can do this.
         """
-        image = input_image
-        
-        if len(image.shape) == 4:
-            h, w = image.shape[2:4]
-        elif len(image.shape) == 2:
-            h, w = image.shape[:2]
+        for key_idx in self.sample_keys_images:
+            image = sample[key_idx]
+            PixelSize = sample[self.sample_key_PixelSize]
+            
+            if len(image.shape) == 4:
+                h, w = image.shape[2:4]
+            elif len(image.shape) == 2:
+                h, w = image.shape[:2]
 
-        if isinstance(self.output_size, int):
-            if h > w:
-                new_h, new_w = self.output_size * h / w, self.output_size
+            if isinstance(self.output_size, int):
+                new_h, new_w = self.output_size* h / w, self.output_size
             else:
-                new_h, new_w = self.output_size, self.output_size * w / h
-        else:
-            new_h, new_w = self.output_size
+                new_h, new_w = self.output_size
+
+            new_h, new_w = int(new_h), int(new_w)
+
+            if len(image.shape)==4:
+                resize = transforms.Resize((new_h, new_w), interpolation=InterpolationMode.NEAREST)        
+                out = resize(image)
+            elif len(image.shape)==2:
+                out = transform.resize(image, (new_h, new_w), order=0)
+            
+            sample[key_idx] = out
+            
+            # Output the rescaled PixelSize
+            if PixelSize == None:
+                out_PixelSize = None
+            else:
+                out_PixelSize = (PixelSize[0]*(h/new_h), PixelSize[1]*(w/new_w))
+            sample[self.sample_key_PixelSize] = out_PixelSize
+        return sample
+
+class RescalingNormalisation(object):
+    def __init__(self, sample_keys_images):
+        """
+        Inputs:
+            sample_keys_images (list or tuple): list of strings representing the keys to images in the sample_dictionary
+        """
+        self.sample_keys_images = sample_keys_images
+    def __call__(self, sample):
+        """
+        Inputs:
+            sample (dict): the dictionary containing the images to be transformed
+                            Images should be Torch Tensors in the format: [B x C x H x W]
+                            B is batch number, C is channels, H is number of rows, W is number of columns
+                            The "ToTensor" function can do this.
+        """
+        for key_idx in self.sample_keys_images:
+            image = sample[key_idx]
+            sample[key_idx] = (image - torch.min(image))/(torch.max(image) - torch.min(image))
+        return sample
         
-        new_h, new_w = int(new_h), int(new_w)
-        
-        if len(image.shape)==4:
-            resize = transforms.Resize((new_h, new_w), interpolation=InterpolationMode.NEAREST)        
-            out = resize(image)
-        elif len(image.shape)==2:
-            out = transform.resize(image, (new_h, new_w), order=0)
-        return out
-class RandomCrop
+class ImageComplement(object):
+    """
+    Inverse the grayscale image.  White becomes black and vice versa.
+    """
+    def __init__(self, sample_keys_images):
+        self.sample_keys_images = sample_keys_images
+    def __call__(self, sample):
+        """
+        Image in sample_dict assumed to be a torch tensor
+        """
+        for key_idx in self.sample_keys_images:
+            image = sample[key_idx]
+            sample[key_idx] = torch.abs(torch.max(image)-image) # Dark is low intensity, bright is high intensity
+        return sample
