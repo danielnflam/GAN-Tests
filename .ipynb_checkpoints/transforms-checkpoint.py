@@ -5,7 +5,6 @@ from skimage import io, transform
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 import os, sys, time, datetime
-from torchvision.transforms.functional import InterpolationMode
 
 
 """
@@ -29,8 +28,8 @@ class ToTensor(object):
         """
         for key_idx in self.sample_keys_images:
             image = sample[key_idx]
-            image = image.astype(np.float64)
-            sample[key_idx] = torch.from_numpy(image[np.newaxis, np.newaxis,:])
+            image = image.astype(np.float16)
+            sample[key_idx] = torch.from_numpy(image[np.newaxis,:])
             
         return sample
 
@@ -61,7 +60,7 @@ class Rescale(object):
         """
         Inputs:
             sample (dict): the dictionary containing the images to be transformed
-                            Images should be Torch Tensors in the format: [B x C x H x W]
+                            Images should be numpy arrays in the format: [H x W]
                             B is batch number, C is channels, H is number of rows, W is number of columns
                             The "ToTensor" function can do this.
         """
@@ -69,11 +68,9 @@ class Rescale(object):
             image = sample[key_idx]
             PixelSize = sample[self.sample_key_PixelSize]
             
-            if len(image.shape) == 4:
-                h, w = image.shape[2:4]
-            elif len(image.shape) == 2:
+            if len(image.shape) == 2:
                 h, w = image.shape[:2]
-
+                
             if isinstance(self.output_size, int):
                 new_h, new_w = self.output_size* h / w, self.output_size
             else:
@@ -81,10 +78,8 @@ class Rescale(object):
 
             new_h, new_w = int(new_h), int(new_w)
 
-            if len(image.shape)==4:
-                resize = transforms.Resize((new_h, new_w), interpolation=InterpolationMode.NEAREST)        
-                out = resize(image)
-            elif len(image.shape)==2:
+            if len(image.shape)==2:
+                # Skimage transform
                 out = transform.resize(image, (new_h, new_w), order=0)
             
             sample[key_idx] = out
@@ -108,13 +103,13 @@ class RescalingNormalisation(object):
         """
         Inputs:
             sample (dict): the dictionary containing the images to be transformed
-                            Images should be Torch Tensors in the format: [B x C x H x W]
+                            Images should be numpy arrays in the format [H x W]
                             B is batch number, C is channels, H is number of rows, W is number of columns
                             The "ToTensor" function can do this.
         """
         for key_idx in self.sample_keys_images:
             image = sample[key_idx]
-            sample[key_idx] = (image - torch.min(image))/(torch.max(image) - torch.min(image))
+            sample[key_idx] = (image - np.amin(image))/(np.amax(image) - np.amin(image))
         return sample
         
 class ImageComplement(object):
@@ -125,9 +120,27 @@ class ImageComplement(object):
         self.sample_keys_images = sample_keys_images
     def __call__(self, sample):
         """
-        Image in sample_dict assumed to be a torch tensor
+        Image in sample_dict assumed to be a numpy array [H x W]
         """
         for key_idx in self.sample_keys_images:
             image = sample[key_idx]
-            sample[key_idx] = torch.abs(torch.max(image)-image) # Dark is low intensity, bright is high intensity
+            sample[key_idx] = np.abs(np.amax(image)-image) # Dark is low intensity, bright is high intensity
+        return sample
+    
+class Random180(object):
+    """
+    Randomly flip image via horizontal axis and then vertical axis.
+    This ensures that the heart points towards the left side of the body.
+    """
+    def __init__(self, sample_keys_images, probability):
+        self.sample_keys_images = sample_keys_images
+        self.probability = probability
+    def __call__(self, sample):
+        if np.random.rand(1) > self.probability:
+            for key_idx in self.sample_keys_images:
+                image = sample[key_idx]
+                image = np.flip(image, 0)
+                image = np.flip(image, 1)
+                sample[key_idx] = image
+        
         return sample

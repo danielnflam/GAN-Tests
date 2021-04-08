@@ -354,12 +354,12 @@ class ResUNet_A_Block_1(nn.Module):
         self.dilation_rate_acrossBlocks = _dilation_rates
         self.stride = _stride
         
-        if (_norm_type == 'BatchNorm'):
+        """if (_norm_type == 'BatchNorm'):
             self.norm = nn.BatchNorm2d
         elif (_norm_type == 'InstanceNorm'):
             self.norm = nn.InstanceNorm2d
         else:
-            raise NotImplementedError
+            raise NotImplementedError"""
         
         d = self.dilation_rate_acrossBlocks[0]
         self.miniBlock1 = ResUNet_A_miniBlock( self.in_channels,  _kernel_size=self.kernel_size , _dilation_rate=(d,d), _stride=self.stride, _norm_type=_norm_type, **kwargs)
@@ -463,7 +463,7 @@ class Encoder_ResUNet_A_d7(nn.Module):
         
         
         _out_channels_1 = self.initial_channels*2**(0)
-        self.conv_first_normed = Conv2DN(1, _out_channels_1,
+        self.conv_first_normed = Conv2DN(_input_array_shape[1], _out_channels_1,
                                               _kernel_size=(1,1),
                                               _norm_type = _norm_type)
         
@@ -550,13 +550,20 @@ class MultiScale_Classifier(nn.Module):
         super().__init__();
         
         self.initial_channels = _input_channels # Initial number of filters output from the encoder's first layer
+        self.input_array_shape = _input_array_shape
+        self.classifier_out_channels = _classifier_out_channels
+        self.norm_type = _norm_type
+        self.ADL_drop_rate = _ADL_drop_rate
+        self.ADL_gamma = _ADL_gamma
         
         """
         ResUNet Encoder Section from Diakogiannis et al.
         doi: 10.1016/j.isprsjprs.2020.01.013
         """
         
-        self.enc = Encoder_ResUNet_A_d7(_input_channels, _input_array_shape, _norm_type=_norm_type, _ADL_drop_rate=_ADL_drop_rate, _ADL_gamma=_ADL_gamma)
+        self.enc = Encoder_ResUNet_A_d7(_input_channels=self.initial_channels, _input_array_shape=self.input_array_shape,
+                                        _norm_type=self.norm_type, 
+                                        _ADL_drop_rate=self.ADL_drop_rate, _ADL_gamma=self.ADL_gamma)
         _out_channels = self.enc.output_array_size[1]
         """
         Classifier Section from Wang et al. 2020. A fully automatic deep learning system for COVID-19 diagnostic and prognostic analysis.
@@ -564,10 +571,11 @@ class MultiScale_Classifier(nn.Module):
         """
         # Max Pool
         self.MaxPool = nn.MaxPool2d(kernel_size=(2,2), stride=(2,2), padding=0, dilation=1, return_indices=False, ceil_mode=False)
-        self.BN = nn.BatchNorm2d(num_features=_out_channels, affine=False)
+        self.batchnorm = nn.BatchNorm2d(num_features=_out_channels, affine=False)
         self.relu = nn.ReLU()
         self.conv2dense = nn.Conv2d(in_channels=_out_channels, out_channels=_classifier_out_channels, kernel_size=(1,1),stride=(1,1),padding=0, dilation=1, bias=False)
         self.GlobalAvgPool2d = nn.AdaptiveAvgPool2d((1,1))
+        self.flatten = nn.Flatten()
         self.dense_classifier = nn.Linear(in_features=_classifier_out_channels, out_features=1, bias=True)
         
     def forward(self, x: Tensor) -> int:
@@ -580,12 +588,13 @@ class MultiScale_Classifier(nn.Module):
         Classifier Section
         """        
         out = self.MaxPool(out)
-        out = self.BN(out)
+        out = self.batchnorm(out)
         out = self.relu(out)
         out = self.conv2dense(out)
         out = self.GlobalAvgPool2d(out)
-        out = torch.flatten(out)
+        out = self.flatten(out)
         out = self.dense_classifier(out)
+        
         return out
 
 class Generator_ResUNet_A(nn.Module):
@@ -641,7 +650,7 @@ class Generator_ResUNet_A(nn.Module):
         
         self.PSPpool_last = PSPPooling((0, out_channels_13, int(spatial[0]), int(spatial[1]) ) )
         
-        self.conv2d_final = nn.Conv2d(in_channels=out_channels_13, out_channels=_input_array_shape[1], kernel_size=(1,1),stride=(1,1),padding=0, dilation=1, bias=False)
+        self.conv2d_final = nn.Conv2d(in_channels=out_channels_13, out_channels=1, kernel_size=(1,1),stride=(1,1),padding=0, dilation=1, bias=False)
         
     def forward(self, x: Tensor) -> Tensor:
         """
