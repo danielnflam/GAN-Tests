@@ -28,7 +28,7 @@ class ToTensor(object):
         """
         for key_idx in self.sample_keys_images:
             image = sample[key_idx]
-            image = image.astype(np.float16)
+            image = image.astype(np.float32)
             sample[key_idx] = torch.from_numpy(image[np.newaxis,:])
             
         return sample
