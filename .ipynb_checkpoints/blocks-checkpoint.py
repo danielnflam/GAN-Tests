@@ -1252,37 +1252,121 @@ class Generator_ResUNet_PixelShuffle(nn.Module):
                                          _reluType=self.reluType)
         
         self.convblock21 = ResUNet_block(_in_channels=self.first_out_channels*(2**0),
-                                         _out_channels=self.first_out_channels*(2**1),
+                                         _out_channels=self.first_out_channels*(2**2),
                                          _kernel_size=(3,3), _stride=(2,2), _padding=(1,1),
                                          _reluType=self.reluType)
-        self.convblock22 = ResUNet_block(_in_channels=self.first_out_channels*(2**1),
-                                         _out_channels=self.first_out_channels*(2**1),
+        self.convblock22 = ResUNet_block(_in_channels=self.first_out_channels*(2**2),
+                                         _out_channels=self.first_out_channels*(2**2),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
                                          _reluType=self.reluType)
         self.shortcut2 = ResUNet_shortcut(_input_tensor_channels=self.first_out_channels*(2**0),
-                                          _output_channels=self.first_out_channels*(2**1), _stride=2)
-        
-        self.convblock31 = ResUNet_block(_in_channels=self.first_out_channels*(2**1),
-                                         _out_channels=self.first_out_channels*(2**2),
-                                         _kernel_size=(3,3), _stride=(2,2), _padding=(1,1),
-                                         _reluType=self.reluType)
-        self.convblock32 = ResUNet_block(_in_channels=self.first_out_channels*(2**2),
-                                         _out_channels=self.first_out_channels*(2**2),
-                                         _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
-        self.shortcut3 = ResUNet_shortcut(_input_tensor_channels=self.first_out_channels*(2**1),
                                           _output_channels=self.first_out_channels*(2**2), _stride=2)
-        # Bridge
-        self.convblockB1 = ResUNet_block(_in_channels=self.first_out_channels*(2**2),
-                                         _out_channels=self.first_out_channels*(2**3),
+        
+        self.convblock31 = ResUNet_block(_in_channels=self.first_out_channels*(2**2),
+                                         _out_channels=self.first_out_channels*(2**4),
                                          _kernel_size=(3,3), _stride=(2,2), _padding=(1,1),
                                          _reluType=self.reluType)
-        self.convblockB2 = ResUNet_block(_in_channels=self.first_out_channels*(2**3),
-                                         _out_channels=self.first_out_channels*(2**3),
+        self.convblock32 = ResUNet_block(_in_channels=self.first_out_channels*(2**4),
+                                         _out_channels=self.first_out_channels*(2**4),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
                                          _reluType=self.reluType)
-        self.shortcutB = ResUNet_shortcut(_input_tensor_channels=self.first_out_channels*(2**2),
-                                          _output_channels=self.first_out_channels*(2**3), _stride=2)
+        self.shortcut3 = ResUNet_shortcut(_input_tensor_channels=self.first_out_channels*(2**2),
+                                          _output_channels=self.first_out_channels*(2**4), _stride=2)
+        # Bridge
+        self.convblockB1 = ResUNet_block(_in_channels=self.first_out_channels*(2**4),
+                                         _out_channels=self.first_out_channels*(2**6),
+                                         _kernel_size=(3,3), _stride=(2,2), _padding=(1,1),
+                                         _reluType=self.reluType)
+        self.convblockB2 = ResUNet_block(_in_channels=self.first_out_channels*(2**6),
+                                         _out_channels=self.first_out_channels*(2**6),
+                                         _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
+                                         _reluType=self.reluType)
+        # Decoder
+        self.upSample = nn.PixelShuffle(upscale_factor=2)
+        
+        self.convblock51 = ResUNet_block(_in_channels=self.first_out_channels*(2**4)+self.first_out_channels*(2**4),
+                                         _out_channels=self.first_out_channels*(2**4),
+                                         _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
+                                         _reluType=self.reluType)
+        self.convblock52 = ResUNet_block(_in_channels=self.first_out_channels*(2**4),
+                                         _out_channels=self.first_out_channels*(2**4),
+                                         _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
+                                         _reluType=self.reluType)
+        self.shortcut5 = ResUNet_shortcut(_input_tensor_channels=self.first_out_channels*(2**4)+self.first_out_channels*(2**4),
+                                          _output_channels=self.first_out_channels*(2**4), _stride=1)
+        
+        self.convblock61 = ResUNet_block(_in_channels=self.first_out_channels*(2**2)+self.first_out_channels*(2**2),
+                                         _out_channels=self.first_out_channels*(2**2),
+                                         _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
+                                         _reluType=self.reluType)
+        self.convblock62 = ResUNet_block(_in_channels=self.first_out_channels*(2**2),
+                                         _out_channels=self.first_out_channels*(2**2),
+                                         _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
+                                         _reluType=self.reluType)
+        self.shortcut6 = ResUNet_shortcut(_input_tensor_channels=self.first_out_channels*(2**2)+self.first_out_channels*(2**2),
+                                          _output_channels=self.first_out_channels*(2**2), _stride=1)
+        
+        self.convblock71 = ResUNet_block(_in_channels=self.first_out_channels*(2**0)+self.first_out_channels*(2**0),
+                                         _out_channels=self.first_out_channels*(2**0),
+                                         _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
+                                         _reluType=self.reluType)
+        self.convblock72 = ResUNet_block(_in_channels=self.first_out_channels*(2**0),
+                                         _out_channels=self.first_out_channels*(2**0),
+                                         _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
+                                         _reluType=self.reluType)
+        self.shortcut7 = ResUNet_shortcut(_input_tensor_channels=self.first_out_channels*(2**0)+self.first_out_channels*(2**0),
+                                          _output_channels=self.first_out_channels*(2**0), _stride=1)
+        self.output_conv = nn.Conv2d(in_channels=self.first_out_channels*(2**0), out_channels=input_array_shape[1],
+                                kernel_size=(1,1), stride=(1,1), padding=(0,0), 
+                                dilation=1, bias=False)
+        self.output_activation = nn.Sigmoid()
+
+    def forward(self, x: Tensor) -> Tensor:
+        # Encoder
+        out = self.conv1(x)
+        out = self.convblock12(out)
+        out1 = out + x
+        
+        out = self.convblock21(out1)
+        out = self.convblock22(out)
+        shortcut = self.shortcut2(out1)
+        out2 = out + shortcut
+        
+        out = self.convblock31(out2)
+        out = self.convblock32(out)
+        shortcut = self.shortcut3(out2)
+        out3 = out + shortcut
+        
+        # Bridge
+        out = self.convblockB1(out3)
+        out = self.convblockB2(out)
+        
         
         # Decoder
+        out = self.upSample(out)
+        out5 = torch.cat((out, out3), axis=1)
+        out = self.convblock51(out5)
+        out = self.dropout1(out)
+        out = self.convblock52(out)
+        out = self.dropout2(out)
+        shortcut = self.shortcut5(out5)
+        out = out + shortcut
         
+        out = self.upSample(out)
+        out6 = torch.cat((out, out2), axis=1)
+        out = self.convblock61(out6)
+        out = self.dropout3(out)
+        out = self.convblock62(out)
+        shortcut = self.shortcut6(out6)
+        out = out + shortcut
+        
+        out = self.upSample(out)
+        out7 = torch.cat((out, out1), axis=1)
+        out = self.convblock71(out7)
+        out = self.convblock72(out)
+        shortcut = self.shortcut7(out7)
+        out = out + shortcut
+        
+        out = self.output_conv(out)
+        out = self.output_activation(out)
+        return out
