@@ -33,6 +33,23 @@ class ToTensor(object):
             
         return sample
 
+class IntensityJitter(object):
+    """
+    Scale the intensity of the input image randomly by a factor that is randomly chosen between the rescale_factor_limits.
+    
+    Images input are numpy NDARRAYS
+    """
+    def __init__(self, sample_keys_images, rescale_factor_limits=(0.5,1.0)):
+        self.sample_keys_images = sample_keys_images
+        self.rescale_factor_limits = rescale_factor_limits
+    def __call__(self, sample):
+        # Generate the same factor for all images denoted by the sample_keys
+        factor = np.random.rand(1)*(max(self.rescale_factor_limits) - min(self.rescale_factor_limits)) + min(self.rescale_factor_limits)
+        for key_idx in self.sample_keys_images:
+            image = sample[key_idx]
+            sample[key_idx] = factor*image
+        return sample
+
 class Rescale(object):
     """
     Rescale the image in a sample to a given size.
@@ -131,12 +148,13 @@ class Random180(object):
     """
     Randomly flip image via horizontal axis and then vertical axis.
     This ensures that the heart points towards the left side of the body.
+    Probability: the % chance that the flip occurs.  Probability = 0.6 means that a flip occurs 60% of the time.
     """
-    def __init__(self, sample_keys_images, probability):
+    def __init__(self, sample_keys_images, probability=0.5):
         self.sample_keys_images = sample_keys_images
         self.probability = probability
     def __call__(self, sample):
-        if np.random.rand(1) > self.probability:
+        if np.random.rand(1) < self.probability:
             for key_idx in self.sample_keys_images:
                 image = sample[key_idx]
                 image = np.flip(image, 0)
