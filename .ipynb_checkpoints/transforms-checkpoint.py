@@ -33,6 +33,22 @@ class ToTensor(object):
             
         return sample
 
+class RandomIntensityFlip(object):
+    # Black becomes white and white becomes black
+    def __init__(self, sample_keys_images, probability=0.5):
+        self.probability = probability
+        self.sample_keys_images = sample_keys_images
+        
+    def __call__(self, sample):
+        if np.random.rand(1) < self.probability:
+            for key_idx in self.sample_keys_images:
+                image = sample[key_idx]
+                max_image = np.amax(image)                
+                flipped_image = np.abs(max_image - image)
+                sample[key_idx] = flipped_image
+        
+        return sample
+    
 class IntensityJitter(object):
     """
     Scale the intensity of the input image randomly by a factor that is randomly chosen between the rescale_factor_limits.
