@@ -33,6 +33,19 @@ class ToTensor(object):
             
         return sample
 
+class NormaliseBetweenPlusMinus1(object):
+    def __init__(self, sample_keys_images):
+        self.sample_keys_images = sample_keys_images
+    def __call__(self, sample):
+        for key_idx in self.sample_keys_images:
+            image = sample[key_idx]
+            # Rescale to between 0 and 1
+            image = (image - np.amin(image)) / (np.amax(image) - np.amin(image))
+            # Rescale to between -1 and 1
+            image = (image*2 - 1)
+            sample[key_idx] = image
+        return sample
+
 class RandomIntensityFlip(object):
     # Black becomes white and white becomes black
     def __init__(self, sample_keys_images, probability=0.5):

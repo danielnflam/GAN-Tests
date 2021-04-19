@@ -578,7 +578,7 @@ class MultiScale_Classifier(nn.Module):
         self.GlobalAvgPool2d = nn.AdaptiveAvgPool2d((1,1))
         self.flatten = nn.Flatten()
         self.dense_classifier = nn.Linear(in_features=_classifier_out_channels, out_features=1, bias=True)
-        self.output_activation = nn.Sigmoid()
+        #self.output_activation = nn.Sigmoid()
     def forward(self, x: Tensor) -> int:
         """
         The input tensor x (Torch Tensor) contains both the real/fake image and the conditioning image, concatenated in the channel axis
@@ -595,7 +595,7 @@ class MultiScale_Classifier(nn.Module):
         out = self.GlobalAvgPool2d(out)
         out = self.flatten(out)
         out = self.dense_classifier(out)
-        out = self.output_activation(out)
+        #out = self.output_activation(out)
         return out
 
 class Generator_ResUNet_A(nn.Module):
@@ -880,6 +880,91 @@ class Generator_Pix2Pix(nn.Module):
         out = self.outImage(out)
         return out
 
+class Discriminator_Pix2Pix(nn.Module):
+    """
+    The 70x70 PatchGAN from Isola et al.
+    Implementation guided by code from:
+    https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/f13aab8148bd5f15b9eb47b690496df8dadbab0c/models/networks.py#L538
+    
+    LOGITS output -- use BCEWithLogitsLoss
+    
+    Paper:
+    Isola, P., Zhu, J., Zhou, T., & Efros, A. A. (2017). Image-to-Image Translation with Conditional Adversarial Networks. 2017 IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 5967–5976. https://doi.org/10.1109/CVPR.2017.632
+    """
+    def __init__(self, _input_array_size, _first_out_channels=64, _normType="BatchNorm"):
+        super().__init__()
+        self.input_array_size = _input_array_size
+        self.first_out_channels = _first_out_channels
+        self.normType = _normType
+        
+        if self.normType == "BatchNorm":
+            normlayer = nn.BatchNorm2d
+            use_bias = False
+        if self.normType == "InstanceNorm":
+            normlayer = nn.InstanceNorm2d
+            use_bias = True
+        
+        self.conv1 = nn.Conv2d(in_channels=self.input_array_size[1],
+                                out_channels=self.first_out_channels,
+                                kernel_size=(4,4),
+                                stride=(2,2),
+                                padding=(1,1), #same_padding,
+                                dilation=(1,1),
+                                bias=use_bias)
+        
+        _out_channels2 = self.first_out_channels*2
+        self.conv2 = nn.Conv2d(in_channels=self.first_out_channels,
+                                out_channels=_out_channels2,
+                                kernel_size=(4,4),
+                                stride=(2,2),
+                                padding=(1,1), #same_padding,
+                                dilation=(1,1),
+                                bias=use_bias)
+        self.BN2 = normlayer(num_features=_out_channels2, affine=True)
+        
+        _out_channels3 = self.first_out_channels*(2**2)
+        self.conv3 = nn.Conv2d(in_channels=_out_channels2,
+                                out_channels=_out_channels3,
+                                kernel_size=(4,4),
+                                stride=(2,2),
+                                padding=(1,1), #same_padding,
+                                dilation=(1,1),
+                                bias=use_bias)
+        self.BN3 = normlayer(num_features=_out_channels3, affine=True)
+        
+        _out_channels4 = self.first_out_channels*(2**3)
+        self.conv4 = nn.Conv2d(in_channels=_out_channels3,
+                                out_channels=_out_channels4,
+                                kernel_size=(4,4),
+                                stride=1,
+                                padding=(1,1), #same_padding,
+                                dilation=(1,1),
+                                bias=use_bias)
+        self.BN4 = normlayer(num_features=_out_channels4, affine=True)
+        
+        # Final
+        # This is from the pytorch implementation
+        # https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/f13aab8148bd5f15b9eb47b690496df8dadbab0c/models/networks.py#L538
+        self.conv_final = nn.Conv2d(in_channels=_out_channels4, out_channels=1,
+                                   kernel_size=4, stride=1, padding=1, bias=True)
+        
+        self.lrelu = nn.LeakyReLU(0.2, inplace=False)
+        
+    def forward(self, x: Tensor) -> Tensor:
+        out = self.conv1(x)
+        out = self.lrelu(out)
+        out = self.conv2(out)
+        out = self.BN2(out)
+        out = self.lrelu(out)
+        out = self.conv3(out)
+        out = self.BN3(out)
+        out = self.lrelu(out)
+        out = self.conv4(out)
+        out = self.BN4(out)
+        out = self.lrelu(out)
+        out = self.conv_final(out)
+        return out
+    
 ####################################
 # Deep Residual U-Net
 # Zhang, Z., Liu, Q., & Wang, Y. (2018). Road Extraction by Deep Residual U-Net. IEEE Geoscience and Remote Sensing Letters, 15(5), 749–753. https://doi.org/10.1109/LGRS.2018.2802944
