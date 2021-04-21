@@ -1161,13 +1161,13 @@ class Generator_ResUNet_modified(nn.Module):
     1) 2021-04-13: dropout in decoder, like Pix2Pix, after the first 3 conv layers -- use '_dropoutType="normal"' to activate.
     2) 2021-04-13: attention-dropout layer implemented -- switch _dropoutType to "ADL" to activate.
     """
-    def __init__(self, input_array_shape, _first_out_channels=64, _reluType="leaky", _dropoutType="ADL", _drop_rate=0.5):
+    def __init__(self, input_array_shape, _first_out_channels=64, _reluType="leaky", _dropoutType="ADL", _drop_rate=0.5, _output_activation="Sigmoid"):
         super().__init__()
         self.first_out_channels = _first_out_channels
         self.input_array_shape = input_array_shape
         self.reluType = _reluType
         self.dropoutType = _dropoutType
-        
+        self.outputActivationType = _output_activation
         # Dropouts
         if self.dropoutType == "ADL":
             self.dropout1 = ADL(drop_rate=_drop_rate, gamma=0.9)
@@ -1256,7 +1256,11 @@ class Generator_ResUNet_modified(nn.Module):
         self.output_conv = nn.Conv2d(in_channels=self.first_out_channels*(2**0), out_channels=input_array_shape[1],
                                 kernel_size=(1,1), stride=(1,1), padding=(0,0), 
                                 dilation=1, bias=False)
-        self.output_activation = nn.Sigmoid()
+        
+        if self.outputActivationType == "Sigmoid":
+            self.output_activation = nn.Sigmoid()
+        if self.outputActivationType == "Tanh":
+            self.output_activation = nn.Tanh()
         
     def forward(self, x: Tensor) -> Tensor:
         # Encoder
@@ -1310,12 +1314,16 @@ class Generator_ResUNet_modified(nn.Module):
         return out
 
 class Generator_ResUNet_PixelShuffle(nn.Module):
-    def __init__(self, input_array_shape, _first_out_channels=64, _reluType="leaky", _dropoutType="ADL", _drop_rate=0.5):
+    """
+    A ResUNet that uses PixelShuffle to upsample.  This was found to provide poor results in pre-training.
+    """
+    def __init__(self, input_array_shape, _first_out_channels=64, _reluType="leaky", _dropoutType="ADL", _drop_rate=0.5, _output_activation="Sigmoid"):
         super().__init__()
         self.first_out_channels = _first_out_channels
         self.input_array_shape = input_array_shape
         self.reluType = _reluType
         self.dropoutType = _dropoutType
+        self.outputActivationType = _output_activation
         
         # Dropouts
         if self.dropoutType == "ADL":
@@ -1404,7 +1412,11 @@ class Generator_ResUNet_PixelShuffle(nn.Module):
         self.output_conv = nn.Conv2d(in_channels=self.first_out_channels*(2**0), out_channels=input_array_shape[1],
                                 kernel_size=(1,1), stride=(1,1), padding=(0,0), 
                                 dilation=1, bias=False)
-        self.output_activation = nn.Sigmoid()
+        
+        if self.outputActivationType == "Sigmoid":
+            self.output_activation = nn.Sigmoid()
+        if self.outputActivationType == "Tanh":
+            self.output_activation = nn.Tanh()
 
     def forward(self, x: Tensor) -> Tensor:
         # Encoder
@@ -1455,3 +1467,13 @@ class Generator_ResUNet_PixelShuffle(nn.Module):
         out = self.output_conv(out)
         out = self.output_activation(out)
         return out
+    
+############################################################
+# Pix2PixHD
+# https://github.com/NVIDIA/pix2pixHD
+#
+# Features include:
+# 1) Coarse-to-fine generator
+# 2) Multi-scale discriminator
+# 3) Perceptual loss instead of pixel-distance loss
+############################################################

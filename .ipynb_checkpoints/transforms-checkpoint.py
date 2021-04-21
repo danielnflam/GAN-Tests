@@ -46,7 +46,7 @@ class NormaliseBetweenPlusMinus1(object):
             sample[key_idx] = image
         return sample
 
-class RandomIntensityFlip(object):
+class RandomIntensityComplement(object):
     # Black becomes white and white becomes black
     def __init__(self, sample_keys_images, probability=0.5):
         self.probability = probability
@@ -55,11 +55,18 @@ class RandomIntensityFlip(object):
     def __call__(self, sample):
         if np.random.rand(1) < self.probability:
             for key_idx in self.sample_keys_images:
+                
                 image = sample[key_idx]
-                max_image = np.amax(image)                
-                flipped_image = np.abs(max_image - image)
+                max_image = np.amax(image)
+                min_image = np.amin(image)
+                # Rescale image to [0,1]
+                image = (image - min_image)/(max_image - min_image)
+                # Flip image
+                flipped_image = 1 - image
+                # Restore previous scale
+                flipped_image = flipped_image*(max_image - min_image) + min_image
                 sample[key_idx] = flipped_image
-        
+                
         return sample
     
 class IntensityJitter(object):
@@ -68,15 +75,28 @@ class IntensityJitter(object):
     
     Images input are numpy NDARRAYS
     """
-    def __init__(self, sample_keys_images, rescale_factor_limits=(0.5,1.0)):
+    def __init__(self, sample_keys_images, source_image_key="source", rescale_factor_limits=(0.75,1.0), window_motion_limits=(-1,1)):
         self.sample_keys_images = sample_keys_images
         self.rescale_factor_limits = rescale_factor_limits
+        self.window_motion_limits = window_motion_limits
+        self.source_image_key = source_image_key
     def __call__(self, sample):
         # Generate the same factor for all images denoted by the sample_keys
-        factor = np.random.rand(1)*(max(self.rescale_factor_limits) - min(self.rescale_factor_limits)) + min(self.rescale_factor_limits)
+        
+        sd_image = np.std(sample[self.source_image_key])
+        mean_image = np.mean(sample[self.source_image_key])
+        
+        window_motion = np.random.rand(1)*(max(self.window_motion_limits) - min(self.window_motion_limits)) + min(self.window_motion_limits)
+        intensity_factor = np.random.rand(1)*(max(self.rescale_factor_limits) - min(self.rescale_factor_limits)) + min(self.rescale_factor_limits)
+        
         for key_idx in self.sample_keys_images:
             image = sample[key_idx]
-            sample[key_idx] = factor*image
+            # Z-Normalise
+            standardised_image = (image-mean_image)/sd_image
+            # Change intensity distributions
+            standardised_image = standardised_image*intensity_factor
+            # Replace image
+            sample[key_idx] = standardised_image*sd_image + mean_image + window_motion*sd_image
         return sample
 
 class Rescale(object):
@@ -170,7 +190,15 @@ class ImageComplement(object):
         """
         for key_idx in self.sample_keys_images:
             image = sample[key_idx]
-            sample[key_idx] = np.abs(np.amax(image)-image) # Dark is low intensity, bright is high intensity
+            max_image = np.amax(image)
+            min_image = np.amin(image)
+            # Rescale image to [0,1]
+            image = (image - min_image)/(max_image - min_image)
+            # Flip image
+            flipped_image = 1 - image
+            # Restore previous scale
+            flipped_image = flipped_image*(max_image - min_image) + min_image
+            sample[key_idx] = flipped_image
         return sample
     
 class Random180(object):
@@ -190,4 +218,15 @@ class Random180(object):
                 image = np.flip(image, 1)
                 sample[key_idx] = image
         
+        return sample
+class RandomRotation(object):
+    def __init__(self, sample_keys_images):
+        self.sample_keys_images = sample_keys_images
+        
+    def __call__(self, sample):
+        angle = np.random.rand(1)*360
+        for key_idx in self.sample_keys_images:
+            image = sample[key_idx]
+            image = transform.rotate(image, angle, resize=False)
+            sample[key_idx] = image
         return sample
