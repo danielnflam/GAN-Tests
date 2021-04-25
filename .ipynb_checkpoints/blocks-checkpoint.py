@@ -803,11 +803,11 @@ class Pix2Pix_DecoderBlock(nn.Module):
         return out
 
 class Generator_Pix2Pix(nn.Module):
-    def __init__(self, input_array_shape, _normType="BatchNorm", _dropoutType = "normal", _dropRate=0.5):
+    def __init__(self, input_array_shape, _normType="BatchNorm", _dropoutType = "normal", _dropRate=0.5, _outputType="Sigmoid"):
         super().__init__()
         self.first_out_channels = 64
         self.input_array_shape = input_array_shape
-        
+        self.outputType = _outputType
         # Encoder
         self.enc1 = Pix2Pix_Encoder_Block( _in_channels=self.input_array_shape[1], _out_channels=self.first_out_channels, _normType=None)
         self.enc2 = Pix2Pix_Encoder_Block( _in_channels=self.first_out_channels, _out_channels=self.first_out_channels*(2**1))
@@ -849,8 +849,10 @@ class Generator_Pix2Pix(nn.Module):
                             padding=(1,1),
                             dilation=(1,1),
                             bias=True)
-        #self.outImage = nn.Tanh()
-        self.outImage = nn.Sigmoid()
+        if self.outputType == "Tanh":
+            self.outImage = nn.Tanh()
+        if self.outputType == "Sigmoid":
+            self.outImage = nn.Sigmoid()
         
     def forward(self, x: Tensor) -> Tensor:
         # Encode
@@ -970,7 +972,7 @@ class Discriminator_Pix2Pix(nn.Module):
 # Zhang, Z., Liu, Q., & Wang, Y. (2018). Road Extraction by Deep Residual U-Net. IEEE Geoscience and Remote Sensing Letters, 15(5), 749–753. https://doi.org/10.1109/LGRS.2018.2802944
 ####################################
 class ResUNet_block(nn.Module):
-    def __init__(self, _in_channels, _out_channels, _kernel_size, _stride, _padding, _reluType):
+    def __init__(self, _in_channels, _out_channels, _kernel_size, _stride, _padding, _reluType, _normType="BatchNorm"):
         super().__init__()
         self.in_channels = _in_channels
         self.out_channels = _out_channels
@@ -978,9 +980,14 @@ class ResUNet_block(nn.Module):
         self.stride=_stride
         self.padding = _padding
         self.reluType = _reluType
+        self.normType = _normType
         
         # BN
-        self.norm = nn.BatchNorm2d(num_features=self.in_channels, affine=False)
+        if self.normType=="BatchNorm":
+            self.norm = nn.BatchNorm2d(num_features=self.in_channels, affine=False)
+        if self.normType == "InstanceNorm":
+            self.norm = nn.InstanceNorm2d(num_features=self.in_channels, affine=False)
+            
         # ReLU
         if self.reluType == "normal":
             self.relu = nn.ReLU()
@@ -997,12 +1004,16 @@ class ResUNet_block(nn.Module):
         return out
     
 class ResUNet_shortcut(nn.Module):
-    def __init__(self, _input_tensor_channels, _output_channels, _stride):
+    def __init__(self, _input_tensor_channels, _output_channels, _stride, _normType="BatchNorm"):
         super().__init__()
         self.shortcut_conv = nn.Conv2d(in_channels=_input_tensor_channels, out_channels=_output_channels,
                                 kernel_size=1, stride=_stride, padding=0, 
                                 dilation=1, bias=False)
-        self.shortcut_norm = nn.BatchNorm2d(num_features=_output_channels, affine=False)
+        if self.normType=="BatchNorm":
+            self.shortcut_norm = nn.BatchNorm2d(num_features=_output_channels, affine=False)
+        if self.normType == "InstanceNorm":
+            self.shortcut_norm = nn.InstanceNorm2d(num_features=_output_channels, affine=False)
+        
     def forward(self, x: Tensor) -> Tensor:
         out = self.shortcut_conv(x)
         out = self.shortcut_norm(out)
@@ -1012,12 +1023,12 @@ class Generator_ResUNet(nn.Module):
     """
     Zhang, Z., Liu, Q., & Wang, Y. (2018). Road Extraction by Deep Residual U-Net. IEEE Geoscience and Remote Sensing Letters, 15(5), 749–753. https://doi.org/10.1109/LGRS.2018.2802944
     """
-    def __init__(self, input_array_shape, _first_out_channels=64, _reluType="leaky"):
+    def __init__(self, input_array_shape, _first_out_channels=64, _reluType="leaky", _normType="BatchNorm"):
         super().__init__()
         self.first_out_channels = _first_out_channels
         self.input_array_shape = input_array_shape
         self.reluType = _reluType
-        
+        self.normType = _normType
         
         # Encoder
         self.conv1 = nn.Conv2d(in_channels=input_array_shape[1], out_channels=self.first_out_channels,
@@ -1026,74 +1037,74 @@ class Generator_ResUNet(nn.Module):
         self.convblock12 = ResUNet_block(_in_channels=self.first_out_channels*(2**0),
                                          _out_channels=self.first_out_channels*(2**0),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         
         self.convblock21 = ResUNet_block(_in_channels=self.first_out_channels*(2**0),
                                          _out_channels=self.first_out_channels*(2**1),
                                          _kernel_size=(3,3), _stride=(2,2), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.convblock22 = ResUNet_block(_in_channels=self.first_out_channels*(2**1),
                                          _out_channels=self.first_out_channels*(2**1),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.shortcut2 = ResUNet_shortcut(_input_tensor_channels=self.first_out_channels*(2**0),
-                                          _output_channels=self.first_out_channels*(2**1), _stride=2)
+                                          _output_channels=self.first_out_channels*(2**1), _stride=2, _normType=self.normType)
         
         self.convblock31 = ResUNet_block(_in_channels=self.first_out_channels*(2**1),
                                          _out_channels=self.first_out_channels*(2**2),
                                          _kernel_size=(3,3), _stride=(2,2), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.convblock32 = ResUNet_block(_in_channels=self.first_out_channels*(2**2),
                                          _out_channels=self.first_out_channels*(2**2),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.shortcut3 = ResUNet_shortcut(_input_tensor_channels=self.first_out_channels*(2**1),
-                                          _output_channels=self.first_out_channels*(2**2), _stride=2)
+                                          _output_channels=self.first_out_channels*(2**2), _stride=2, _normType=self.normType)
         # Bridge
         self.convblockB1 = ResUNet_block(_in_channels=self.first_out_channels*(2**2),
                                          _out_channels=self.first_out_channels*(2**3),
                                          _kernel_size=(3,3), _stride=(2,2), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.convblockB2 = ResUNet_block(_in_channels=self.first_out_channels*(2**3),
                                          _out_channels=self.first_out_channels*(2**3),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.shortcutB = ResUNet_shortcut(_input_tensor_channels=self.first_out_channels*(2**2),
-                                          _output_channels=self.first_out_channels*(2**3), _stride=2)
+                                          _output_channels=self.first_out_channels*(2**3), _stride=2, _normType=self.normType)
         
         # Decoder
         self.upSample = nn.Upsample(scale_factor=2, mode='nearest', align_corners=None)
         self.convblock51 = ResUNet_block(_in_channels=self.first_out_channels*(2**3)+self.first_out_channels*(2**2),
                                          _out_channels=self.first_out_channels*(2**2),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.convblock52 = ResUNet_block(_in_channels=self.first_out_channels*(2**2),
                                          _out_channels=self.first_out_channels*(2**2),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.shortcut5 = ResUNet_shortcut(_input_tensor_channels=self.first_out_channels*(2**3)+self.first_out_channels*(2**2),
-                                          _output_channels=self.first_out_channels*(2**2), _stride=1)
+                                          _output_channels=self.first_out_channels*(2**2), _stride=1, _normType=self.normType)
         
         self.convblock61 = ResUNet_block(_in_channels=self.first_out_channels*(2**2)+self.first_out_channels*(2**1),
                                          _out_channels=self.first_out_channels*(2**1),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.convblock62 = ResUNet_block(_in_channels=self.first_out_channels*(2**1),
                                          _out_channels=self.first_out_channels*(2**1),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.shortcut6 = ResUNet_shortcut(_input_tensor_channels=self.first_out_channels*(2**2)+self.first_out_channels*(2**1),
-                                          _output_channels=self.first_out_channels*(2**1), _stride=1)
+                                          _output_channels=self.first_out_channels*(2**1), _stride=1, _normType=self.normType)
         self.convblock71 = ResUNet_block(_in_channels=self.first_out_channels*(2**1)+self.first_out_channels*(2**0),
                                          _out_channels=self.first_out_channels*(2**0),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.convblock72 = ResUNet_block(_in_channels=self.first_out_channels*(2**0),
                                          _out_channels=self.first_out_channels*(2**0),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.shortcut7 = ResUNet_shortcut(_input_tensor_channels=self.first_out_channels*(2**1)+self.first_out_channels*(2**0),
-                                          _output_channels=self.first_out_channels*(2**0), _stride=1)
+                                          _output_channels=self.first_out_channels*(2**0), _stride=1, _normType=self.normType)
         self.output_conv = nn.Conv2d(in_channels=self.first_out_channels*(2**0), out_channels=input_array_shape[1],
                                 kernel_size=(1,1), stride=(1,1), padding=(0,0), 
                                 dilation=1, bias=False)
@@ -1161,13 +1172,14 @@ class Generator_ResUNet_modified(nn.Module):
     1) 2021-04-13: dropout in decoder, like Pix2Pix, after the first 3 conv layers -- use '_dropoutType="normal"' to activate.
     2) 2021-04-13: attention-dropout layer implemented -- switch _dropoutType to "ADL" to activate.
     """
-    def __init__(self, input_array_shape, _first_out_channels=64, _reluType="leaky", _dropoutType="ADL", _drop_rate=0.5, _output_activation="Sigmoid"):
+    def __init__(self, input_array_shape, _first_out_channels=64, _reluType="leaky", _normType = "BatchNorm", _dropoutType="ADL", _drop_rate=0.5, _output_activation="Sigmoid"):
         super().__init__()
         self.first_out_channels = _first_out_channels
         self.input_array_shape = input_array_shape
         self.reluType = _reluType
         self.dropoutType = _dropoutType
         self.outputActivationType = _output_activation
+        self.normType = _normType
         # Dropouts
         if self.dropoutType == "ADL":
             self.dropout1 = ADL(drop_rate=_drop_rate, gamma=0.9)
@@ -1185,74 +1197,74 @@ class Generator_ResUNet_modified(nn.Module):
         self.convblock12 = ResUNet_block(_in_channels=self.first_out_channels*(2**0),
                                          _out_channels=self.first_out_channels*(2**0),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         
         self.convblock21 = ResUNet_block(_in_channels=self.first_out_channels*(2**0),
                                          _out_channels=self.first_out_channels*(2**1),
                                          _kernel_size=(3,3), _stride=(2,2), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.convblock22 = ResUNet_block(_in_channels=self.first_out_channels*(2**1),
                                          _out_channels=self.first_out_channels*(2**1),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.shortcut2 = ResUNet_shortcut(_input_tensor_channels=self.first_out_channels*(2**0),
-                                          _output_channels=self.first_out_channels*(2**1), _stride=2)
+                                          _output_channels=self.first_out_channels*(2**1), _stride=2, _normType=self.normType)
         
         self.convblock31 = ResUNet_block(_in_channels=self.first_out_channels*(2**1),
                                          _out_channels=self.first_out_channels*(2**2),
                                          _kernel_size=(3,3), _stride=(2,2), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.convblock32 = ResUNet_block(_in_channels=self.first_out_channels*(2**2),
                                          _out_channels=self.first_out_channels*(2**2),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.shortcut3 = ResUNet_shortcut(_input_tensor_channels=self.first_out_channels*(2**1),
                                           _output_channels=self.first_out_channels*(2**2), _stride=2)
         # Bridge
         self.convblockB1 = ResUNet_block(_in_channels=self.first_out_channels*(2**2),
                                          _out_channels=self.first_out_channels*(2**3),
                                          _kernel_size=(3,3), _stride=(2,2), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.convblockB2 = ResUNet_block(_in_channels=self.first_out_channels*(2**3),
                                          _out_channels=self.first_out_channels*(2**3),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.shortcutB = ResUNet_shortcut(_input_tensor_channels=self.first_out_channels*(2**2),
-                                          _output_channels=self.first_out_channels*(2**3), _stride=2)
+                                          _output_channels=self.first_out_channels*(2**3), _stride=2, _normType=self.normType)
         
         # Decoder
         self.upSample = nn.Upsample(scale_factor=2, mode='nearest', align_corners=None)
         self.convblock51 = ResUNet_block(_in_channels=self.first_out_channels*(2**3)+self.first_out_channels*(2**2),
                                          _out_channels=self.first_out_channels*(2**2),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.convblock52 = ResUNet_block(_in_channels=self.first_out_channels*(2**2),
                                          _out_channels=self.first_out_channels*(2**2),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.shortcut5 = ResUNet_shortcut(_input_tensor_channels=self.first_out_channels*(2**3)+self.first_out_channels*(2**2),
-                                          _output_channels=self.first_out_channels*(2**2), _stride=1)
+                                          _output_channels=self.first_out_channels*(2**2), _stride=1, _normType=self.normType)
         
         self.convblock61 = ResUNet_block(_in_channels=self.first_out_channels*(2**2)+self.first_out_channels*(2**1),
                                          _out_channels=self.first_out_channels*(2**1),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.convblock62 = ResUNet_block(_in_channels=self.first_out_channels*(2**1),
                                          _out_channels=self.first_out_channels*(2**1),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.shortcut6 = ResUNet_shortcut(_input_tensor_channels=self.first_out_channels*(2**2)+self.first_out_channels*(2**1),
-                                          _output_channels=self.first_out_channels*(2**1), _stride=1)
+                                          _output_channels=self.first_out_channels*(2**1), _stride=1, _normType=self.normType)
         self.convblock71 = ResUNet_block(_in_channels=self.first_out_channels*(2**1)+self.first_out_channels*(2**0),
                                          _out_channels=self.first_out_channels*(2**0),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.convblock72 = ResUNet_block(_in_channels=self.first_out_channels*(2**0),
                                          _out_channels=self.first_out_channels*(2**0),
                                          _kernel_size=(3,3), _stride=(1,1), _padding=(1,1),
-                                         _reluType=self.reluType)
+                                         _reluType=self.reluType, _normType=self.normType)
         self.shortcut7 = ResUNet_shortcut(_input_tensor_channels=self.first_out_channels*(2**1)+self.first_out_channels*(2**0),
-                                          _output_channels=self.first_out_channels*(2**0), _stride=1)
+                                          _output_channels=self.first_out_channels*(2**0), _stride=1, _normType=self.normType)
         self.output_conv = nn.Conv2d(in_channels=self.first_out_channels*(2**0), out_channels=input_array_shape[1],
                                 kernel_size=(1,1), stride=(1,1), padding=(0,0), 
                                 dilation=1, bias=False)
@@ -1469,11 +1481,8 @@ class Generator_ResUNet_PixelShuffle(nn.Module):
         return out
     
 ############################################################
-# Pix2PixHD
-# https://github.com/NVIDIA/pix2pixHD
-#
-# Features include:
-# 1) Coarse-to-fine generator
-# 2) Multi-scale discriminator
-# 3) Perceptual loss instead of pixel-distance loss
+# MEDGAN
+# U-net blocks as generator
+# 1) Perceptual loss instead of pixel-distance loss
+# 2) use VGG19 network for feature extraction
 ############################################################
