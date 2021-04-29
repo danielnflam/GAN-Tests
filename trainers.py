@@ -120,10 +120,10 @@ class WGAN_GP_Trainer_unfinished():
                 if self.num_steps > self.critic_iterations:
                     print("G: {}".format(self.losses['G'][-1]))
 
-    def train(self, data_loader, epochs, save_training_gif=True):
+    def train(self, data_loader, epochs, test_samples, save_training_gif=True):
         if save_training_gif:
             # Fix latents to see how image generation improves during training
-            fixed_latents = Variable(self.G.sample_latent(64))
+            fixed_latents = test_samples
             if self.use_cuda:
                 fixed_latents = fixed_latents.cuda()
             training_progress_images = []
@@ -145,15 +145,12 @@ class WGAN_GP_Trainer_unfinished():
             imageio.mimsave('./training_{}_epochs.gif'.format(epochs),
                             training_progress_images)
 
-    def sample_generator(self, num_samples):
-        latent_samples = Variable(self.G.sample_latent(num_samples))
-        if self.use_cuda:
-            latent_samples = latent_samples.cuda()
-        generated_data = self.G(latent_samples)
+    def sample_generator(self, samples):
+        generated_data = self.G(samples)
         return generated_data
 
     def sample(self, num_samples):
-        generated_data = self.sample_generator(num_samples)
+        generated_data = self.sample_generator(samples)
         # Remove color channel
         return generated_data.data.cpu().numpy()[:, 0, :, :]
 
