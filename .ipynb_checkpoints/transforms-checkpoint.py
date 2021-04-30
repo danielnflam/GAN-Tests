@@ -159,12 +159,13 @@ class Rescale(object):
         return sample
 
 class RescalingNormalisation(object):
-    def __init__(self, sample_keys_images):
+    def __init__(self, sample_keys_images, rescale_range):
         """
         Inputs:
             sample_keys_images (list or tuple): list of strings representing the keys to images in the sample_dictionary
         """
         self.sample_keys_images = sample_keys_images
+        self.rescale_range = rescale_range
     def __call__(self, sample):
         """
         Inputs:
@@ -175,7 +176,9 @@ class RescalingNormalisation(object):
         """
         for key_idx in self.sample_keys_images:
             image = sample[key_idx]
-            sample[key_idx] = (image - np.amin(image))/(np.amax(image) - np.amin(image))
+            scaled_image = (image - np.amin(image))/(np.amax(image) - np.amin(image)) # range[0,1]
+            output = scaled_image*(max(self.rescale_range) - min(self.rescale_range)) + min(self.rescale_range) # range[min(self.rescale_range), max(self.rescale_range)]
+            sample[key_idx] = output
         return sample
         
 class ImageComplement(object):

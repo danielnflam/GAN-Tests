@@ -145,7 +145,7 @@ class DilatedDeconvBlock(nn.Module):
         out = self.lrelu(out)
         return out
 
-class Generator(nn.Module):
+class Generator_unfinished(nn.Module):
     def __init__(self, input_array_shape, initial_channels_out=64, use_bias=True, normType="BatchNorm", dropoutType="normal", reluType="normal"):
         super().__init__()
         self.input_array_shape = input_array_shape
@@ -162,6 +162,7 @@ class Generator(nn.Module):
         self.dconv4 = DilatedConvBlock( in_channels=self.initial_channels_out*(2**2), out_channels=self.initial_channels_out*(2**3), dilation=8, use_bias=self.use_bias, normType=self.normType)
         self.dconv5 = DilatedConvBlock( in_channels=self.initial_channels_out*(2**3), out_channels=self.initial_channels_out*(2**3), dilation=16, use_bias=self.use_bias, normType=self.normType)
         self.dconv6 = DilatedConvBlock( in_channels=self.initial_channels_out*(2**3), out_channels=self.initial_channels_out*(2**3), dilation=32, use_bias=self.use_bias, normType=self.normType)
+        
     def forward(self, x):
         out1 = self.conv1(x)
         out2 = self.dconv2(out1)

@@ -98,3 +98,7 @@ def Wasserstein_G(discriminator_output_for_generated_images):
     return -discriminator_output_for_generated_images.mean()
 def Wasserstein_D(discriminator_output_for_real_images, discriminator_output_for_generated_images):
     return (discriminator_output_for_generated_images - discriminator_output_for_real_images).mean()
+
+def criterion_MSELoss(input_image, target_image):
+    loss = nn.MSELoss()
+    return loss(input_image, target_image)
