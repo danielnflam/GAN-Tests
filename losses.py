@@ -42,6 +42,7 @@ def criterion_StyleReconstruction_layer(representation_fake, representation_real
     
     # Frobenius loss squared:
     matrix = torch.matmul(G_difference, torch.transpose(torch.conj(G_difference),-1,-2))
+    print(matrix.shape)
     out = torch.diagonal(matrix, dim1=-2, dim2=-1).sum(-1) 
     return out
 

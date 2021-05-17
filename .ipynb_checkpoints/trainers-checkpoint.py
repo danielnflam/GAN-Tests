@@ -7,6 +7,7 @@ from torch.autograd import Variable
 from torch.autograd import grad as torch_grad
 
 
+
 class WGAN_GP_Trainer_unfinished():
     def __init__(self, generator, discriminator, gen_optimizer, dis_optimizer,
                  gp_weight=10, critic_iterations=5, print_every=50,

@@ -5,8 +5,8 @@ from skimage import io, transform
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 import os, sys, time, datetime
-
-
+import skimage.exposure
+import pywt
 """
 File contains transformations as callable classes.
 
@@ -29,8 +29,59 @@ class ToTensor(object):
         for key_idx in self.sample_keys_images:
             image = sample[key_idx]
             image = image.astype(np.float32)
-            sample[key_idx] = torch.from_numpy(image[np.newaxis,:])
+            if image.ndim == 2:
+                sample[key_idx] = torch.from_numpy(image[np.newaxis,:])
+            elif image.ndim == 3:
+                toTensor = transforms.ToTensor()
+                sample[key_idx] = toTensor(image)
             
+        return sample
+
+class HaarTransform(object):
+    """
+    The output of the Haar transform will be concatenated channelwise.
+    (Approximation, Horizontal, Vertical, Diagonal)
+    
+    """
+    def __init__(self, sample_keys_images):
+        
+        self.sample_keys_images = sample_keys_images
+    def __call__(self, sample):
+        for key_idx in self.sample_keys_images:
+            image = sample[key_idx]
+            # The Haar transform will HALVE the image size
+            # If image is (512,512), it will go to (256,256)
+            (cA , (cH, cV, cD)) = pywt.dwt2(image, 'haar', axes=(-2,-1)) # cA, cH etc have shape (N/2, M/2) where N and M are the image dimensions
+            
+            cA = np.expand_dims(cA,-1)
+            cH = np.expand_dims(cH,-1)
+            cV = np.expand_dims(cV,-1)
+            cD = np.expand_dims(cD,-1)
+            
+            # concatenate into channels
+            sample[key_idx] = np.concatenate((cA,cH,cV,cD), axis=-1)
+        return sample
+        
+    
+class CLAHE(object):
+    def __init__(self, sample_keys_images):
+        self.sample_keys_images = sample_keys_images
+    def __call__(self, sample):
+        for key_idx in self.sample_keys_images:
+            image = sample[key_idx]
+            image = skimage.exposure.equalize_adapthist(image)
+            sample[key_idx] = image
+        return sample
+            
+
+class ZScoreNormalisation(object):
+    def __init__(self, sample_keys_images):
+        self.sample_keys_images = sample_keys_images
+    def __call__(self, sample):
+        for key_idx in self.sample_keys_images:
+            image = sample[key_idx]
+            image = (image - np.mean(image))/np.std(image)
+            sample[key_idx] = image
         return sample
 
 class NormaliseBetweenPlusMinus1(object):
@@ -108,7 +159,7 @@ class Rescale(object):
     
     To keep the aspect ratio the same, use an integer as the input when initialising this object.
     """
-    def __init__(self, output_size, sample_keys_images, sample_key_PixelSize):
+    def __init__(self, output_size, sample_keys_images, sample_key_PixelSize=None):
         """
         Inputs:
             output_size (tuple or int): Desired output size. If tuple, output is
@@ -120,7 +171,7 @@ class Rescale(object):
         assert isinstance(output_size, (int, tuple))
         self.output_size = output_size
         self.sample_keys_images = sample_keys_images
-        self.sample_key_PixelSize = sample_key_PixelSize
+        #self.sample_key_PixelSize = sample_key_PixelSize
         
     def __call__(self, sample):
         """
@@ -132,7 +183,10 @@ class Rescale(object):
         """
         for key_idx in self.sample_keys_images:
             image = sample[key_idx]
-            PixelSize = sample[self.sample_key_PixelSize]
+            #if self.sample_key_PixelSize is not None:
+            #    PixelSize = sample[self.sample_key_PixelSize]
+            #else:
+            #    PixelSize = None
             
             if len(image.shape) == 2:
                 h, w = image.shape[:2]
@@ -151,11 +205,11 @@ class Rescale(object):
             sample[key_idx] = out
             
             # Output the rescaled PixelSize
-            if PixelSize == None:
-                out_PixelSize = None
-            else:
-                out_PixelSize = (PixelSize[0]*(h/new_h), PixelSize[1]*(w/new_w))
-            sample[self.sample_key_PixelSize] = out_PixelSize
+            #if PixelSize == None:
+            #    out_PixelSize = None
+            #else:
+            #    out_PixelSize = (PixelSize[0]*(h/new_h), PixelSize[1]*(w/new_w))
+            #sample[self.sample_key_PixelSize] = out_PixelSize
         return sample
 
 class RescalingNormalisation(object):
@@ -222,6 +276,39 @@ class Random180(object):
                 sample[key_idx] = image
         
         return sample
+    
+class RandomHorizontalFlip(object):
+    """
+    Randomly flip image via horizontal axis.
+    Probability: the % chance that the flip occurs.  Probability = 0.6 means that a flip occurs 60% of the time.
+    """
+    def __init__(self, sample_keys_images, probability=0.5):
+        self.sample_keys_images = sample_keys_images
+        self.probability = probability
+    def __call__(self, sample):
+        if np.random.rand(1) < self.probability:
+            for key_idx in self.sample_keys_images:
+                image = sample[key_idx]
+                image = np.flip(image, 0)
+                sample[key_idx] = image
+        return sample
+
+class RandomVerticalFlip(object):
+    """
+    Randomly flip image via horizontal axis.
+    Probability: the % chance that the flip occurs.  Probability = 0.6 means that a flip occurs 60% of the time.
+    """
+    def __init__(self, sample_keys_images, probability=0.5):
+        self.sample_keys_images = sample_keys_images
+        self.probability = probability
+    def __call__(self, sample):
+        if np.random.rand(1) < self.probability:
+            for key_idx in self.sample_keys_images:
+                image = sample[key_idx]
+                image = np.flip(image, 1)
+                sample[key_idx] = image
+        return sample
+    
 class RandomRotation(object):
     def __init__(self, sample_keys_images):
         self.sample_keys_images = sample_keys_images

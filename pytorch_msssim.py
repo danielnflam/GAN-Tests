@@ -6,6 +6,9 @@ import numpy as np
 """
 CODE SOURCE:
 https://github.com/jorge-pessoa/pytorch-msssim/blob/master/pytorch_msssim/__init__.py
+License:
+MIT
+
 Original Paper:
 DOI: 10.1109/ACSSC.2003.1292216
 """

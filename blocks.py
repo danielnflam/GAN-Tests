@@ -1,15 +1,48 @@
 # IMPLEMENT THE RESNET
 import torch
 from torch import Tensor
-from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn import init
+
 import torchvision.transforms as vtransforms
 from typing import Type, Any, Callable, Union, List, Optional
 import os, random, sys, time, pathlib
+from operator import add
 
 def Identity(x):
     return x
+
+class MiniBatchDiscrimination(nn.Module):
+    """
+    source: https://gist.github.com/t-ae/732f78671643de97bbe2c46519972491
+    paper: Salimans et al. 2016. Improved Methods for Training GANs
+    """
+    def __init__(self, in_features, out_features, kernel_dims, mean=False):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.kernel_dims = kernel_dims
+        self.mean = mean
+        self.T = nn.Parameter(torch.Tensor(in_features, out_features, kernel_dims), requires_grad=True) #  Tensor that is to be considered a module parameter.
+        init.normal_(self.T, 0, 1)
+
+    def forward(self, x):
+        # x is NxA
+        # T is AxBxC
+        matrices = x.mm(self.T.view(self.in_features, -1))
+        matrices = matrices.view(-1, self.out_features, self.kernel_dims)
+
+        M = matrices.unsqueeze(0)  # 1xNxBxC
+        M_T = M.permute(1, 0, 2, 3)  # Nx1xBxC
+        norm = torch.abs(M - M_T).sum(3)  # NxNxB
+        expnorm = torch.exp(-norm)
+        o_b = (expnorm.sum(0) - 1)   # NxB, subtract self distance
+        if self.mean:
+            o_b /= x.size(0) - 1
+
+        x = torch.cat([x, o_b], 1) # concatenate output with the input features
+        return x
 
 class ImageBuffer():
     """
@@ -114,6 +147,52 @@ class ADL(nn.Module):
         return "ADL Drop Rate={}, ADL Gamma={}".format(
             self.drop_rate, self.gamma)
 
+class UpsampleConvolution(nn.Module):
+    """
+    Instead of using ConvTranspose2d, which may lead to weird checkerboard artifacts, use a separate upsample and conv2d 1x1 operation.
+    Here is a generic combination of the two.
+    """
+    def __init__(self, in_channels, out_channels, upsample_size=None, upsample_scale_factor=None, upsample_mode="nearest", upsample_align_corners=False,
+                kernel_size=3, stride=1, padding=0, dilation=1, groups=1, bias=True, padding_mode='zeros'):
+        super().__init__()
+        # upsample
+        if upsample_size is not None:
+            if kernel_size > 1:
+                a = upsample_size
+                b = (2*(kernel_size//2) , 2*(kernel_size//2))
+            self.size=list(map(add, a, b))
+        else:
+            self.size = None
+        self.scale_factor=upsample_scale_factor
+        self.mode=upsample_mode
+        self.align_corners=upsample_align_corners
+        # conv
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
+        self.dilation=dilation
+        self.groups=groups
+        self.bias=bias
+        self.padding_mode=padding_mode
+        
+        # blocks
+        if self.mode == "nearest":
+            #print("Upsampling Mode: " + str(self.mode))
+            self.align_corners = None
+        
+        self.upsample = nn.Upsample(size=self.size, scale_factor = self.scale_factor, mode=self.mode, align_corners=self.align_corners)
+        self.conv = nn.Conv2d(self.in_channels, self.out_channels, self.kernel_size, self.stride, self.padding, self.dilation, self.groups, self.bias, self.padding_mode)
+    def forward(self, x: Tensor) -> Tensor:
+        out = self.upsample(x)
+        out = self.conv(out)
+        return out
+
+######################################
+# Diakogiannis ResUNet-A
+# Not in use
+######################################
     
 class PSPPooling_miniBlock(nn.Module):
     """

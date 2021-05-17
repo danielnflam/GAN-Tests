@@ -42,6 +42,7 @@ def criterion_StyleReconstruction_layer(representation_fake, representation_real
     
     # Frobenius loss squared:
     matrix = torch.matmul(G_difference, torch.transpose(torch.conj(G_difference),-1,-2))
+    print(matrix.shape)
     out = torch.diagonal(matrix, dim1=-2, dim2=-1).sum(-1) 
     return out
 
@@ -98,3 +99,7 @@ def Wasserstein_G(discriminator_output_for_generated_images):
     return -discriminator_output_for_generated_images.mean()
 def Wasserstein_D(discriminator_output_for_real_images, discriminator_output_for_generated_images):
     return (discriminator_output_for_generated_images - discriminator_output_for_real_images).mean()
+
+def criterion_MSELoss(input_image, target_image):
+    loss = nn.MSELoss()
+    return loss(input_image, target_image)
